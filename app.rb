@@ -11,7 +11,7 @@ end
 # Read the files list from the GCS and echo out as json string
 # name of file object is normally separted out two consecutive digits 
 # of the hex digest
-get '/files' do
+get '/files/' do
 	storage = Google::Cloud::Storage.new(project_id: 'cs291-f19')
 	bucket = storage.bucket 'cs291_project2', skip_lookup: true
 	all_files = bucket.files 
@@ -41,6 +41,7 @@ get '/files/:digest' do
 	end
 	
 	# 2. parse the digest into file object name/path
+	digest = digest.downcase
 	digest.insert(4, "/")
 	digest.insert(2, "/")
 
@@ -51,7 +52,7 @@ get '/files/:digest' do
 	file_lookup = bucket.file digest, skip_lookup: false
 
 	if file_lookup.nil? 
-		return Array[404, "Hey the file is not found!\n"]
+		return Array[404, "Hey the file with digest " + digest + " is not found!\n"]
 	end
 
 	original_content_type = file_lookup.content_type
@@ -65,7 +66,7 @@ get '/files/:digest' do
 	return Array[200, {"Content-Type" => original_content_type}, downloaded.read]
 end
 
-post '/files' do
+post '/files/' do
 	require 'stringio'
 	require 'digest'
 
@@ -78,7 +79,11 @@ post '/files' do
 	#file_name = file_params["filename"]
 	file_type = file_params["type"]
 	temp_file = file_params["tempfile"]
-	
+
+	if temp_file.class.name != "Tempfile"
+		return Array[422, "No File Feeded In\n"]
+	end
+
 	# 2. check the file size!
 	size = temp_file.size()
 	if (size > 1024 * 1024) 
@@ -87,7 +92,8 @@ post '/files' do
 
 	digest = Digest::SHA256.hexdigest temp_file.read
 	#temp_digest = digest
-	return_digest = Array[Digest::SHA256.hexdigest temp_file.read] #hummm weird. it somehow has 'pass by reference'
+	temp_file.rewind
+	return_digest = {"uploaded" => (Digest::SHA256.hexdigest temp_file.read)} #hummm weird. it somehow has 'pass by reference'
 	digest.insert(4, "/")
 	digest.insert(2, "/")
 
@@ -99,20 +105,20 @@ post '/files' do
 	# 3. If file exists, return!
 	file_lookup = bucket.file digest, skip_lookup: false
 	if file_lookup
-		return Array[409, "Digest Code Already Exists\n"]
+		return Array[409, "Digest Code '" + digest + "' Already Exists\n"]
 	end
 
 	# 4. If file not exists, perform upload!
 	# content: tempfile, path: digest, 
 	bucket.create_file file_params["tempfile"], digest, content_type: file_type
 
-	return Array[200, return_digest.to_json]
+	return Array[201, return_digest.to_json]
 end
 
 delete '/files/:digest' do
 	# https://googleapis.dev/ruby/google-cloud-storage/latest/Google/Cloud/Storage/File.html#delete-instance_method
 	digest = params['digest']
-
+	digest = digest.downcase
 	# 1. Validate digest by using Regex Match here!
 	if (!digest.match?(/^[A-Fa-f0-9]{64}$/)) 
 		return Array[422, "Digest Not Valid\n"]
