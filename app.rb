@@ -17,7 +17,19 @@ get '/files/' do
 	all_files = bucket.files 
 	SHA256_list = Array[]
 	all_files.all do |file|
-		file_name_parsed = file.name.gsub("/", "")
+		#Hummm maybe tryna find a better way to handle this!
+		file_name_parsed = file.name
+		
+		if file_name_parsed.count("/") != 2
+			next # yes this is bad format!
+		end
+
+		if file_name_parsed.index('/') == 2 && file_name_parsed.index('/', 3) == 5
+			file_name_parsed = file_name_parsed.gsub("/", "")
+		else 
+			next
+		end
+
 		if (!file_name_parsed.match?(/^[A-Fa-f0-9]{64}$/)) 
 			next
 		end
